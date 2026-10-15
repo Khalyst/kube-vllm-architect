@@ -1,7 +1,7 @@
 # ==========================================
 # Stage 1: Build the React + Vite Application
 # ==========================================
-FROM node:20-alpine AS builder
+FROM node:22-alpine AS builder
 
 WORKDIR /app
 
@@ -9,7 +9,7 @@ WORKDIR /app
 COPY package*.json ./
 
 # Install all dependencies cleanly
-RUN npm ci
+RUN npm install
 
 # Copy source code and build assets
 COPY . .
