@@ -107,6 +107,8 @@ The tool generates a complete, production-grade manifest package ready for GitOp
 | `06-keda-autoscaler.yaml` | `ScaledObject` | KEDA autoscaler polling vLLM waiting queue depth and KV cache saturation |
 | `07-gpu-node-provisioner.yaml` | `NodePool`, `EC2NodeClass` | Karpenter (AWS) or GKE GPU node autoscaler specs |
 | `08-gateway-api-and-wasm-security.yaml` | `Gateway`, `HTTPRoute`, `EnvoyFilter` | Kubernetes Gateway API with COOP/COEP headers and Envoy WASM guardrail |
+| `deploy-vllm-stack.yml` | GitHub Actions Workflow | Automated CI/CD pipeline: Buildx, Trivy container CVE scanning, registry push, and kubectl rollout |
+| `pr-manifest-lint.yml` | GitHub Actions Workflow | Pull Request validator: Kustomize dry-run, GPU limit verification, and `/dev/shm` IPC check |
 | `kustomization.yaml` | `Kustomization` | Master Kustomize manifest allowing `kubectl apply -k .` |
 | `helm-values.yaml` | YAML | Production values file compatible with standard vLLM Helm charts |
 | `test-inference.sh` | Bash Script | Pre-configured curl test verifying health, models, and streaming inference |

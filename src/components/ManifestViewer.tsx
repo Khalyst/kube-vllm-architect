@@ -70,7 +70,8 @@ export const ManifestViewer: React.FC<Props> = ({ files, issues }) => {
     { id: 'routing', label: 'Smart Router' },
     { id: 'autoscaling', label: 'KEDA Autoscaling' },
     { id: 'infrastructure', label: 'Cloud GPU Node' },
-    { id: 'package', label: 'Kustomize & Helm' }
+    { id: 'package', label: 'Kustomize & Helm' },
+    { id: 'cicd', label: 'CI/CD Workflows' }
   ];
 
   const filteredFiles = activeCategory === 'all'

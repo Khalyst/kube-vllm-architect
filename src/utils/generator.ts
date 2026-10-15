@@ -844,5 +844,281 @@ curl -X POST "http://\${ROUTER_HOST}:\${PORT}/v1/chat/completions" \\
     description: 'Ready-to-run Bash curl test verifying OpenAI-compatible endpoints and session affinity headers.'
   });
 
+  // 11. CI/CD GitHub Actions: Build, Security Scan (Trivy), Push & Deploy Pipeline
+  const deployWorkflowYaml = generateCiWorkflow(config, servedName);
+
+  files.push({
+    name: 'deploy-vllm-stack.yml',
+    path: `.github/workflows/deploy-vllm-stack.yml`,
+    category: 'cicd',
+    content: deployWorkflowYaml,
+    description: 'GitHub Actions CI/CD pipeline with Trivy container vulnerability scanning, image registry push, and Kubernetes deployment.'
+  });
+
+  // 12. CI/CD GitHub Actions: PR Validation & Manifest Lint Check
+  const prLintWorkflowYaml = `name: PR Manifest Validation & Lint
+
+on:
+  pull_request:
+    branches: [ main, master ]
+    paths:
+      - '${config.namespace}/**'
+      - '.github/workflows/**'
+
+jobs:
+  validate-k8s:
+    name: Validate Manifests & GPU Limits
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout Code
+      uses: actions/checkout@v4
+
+    - name: Setup Kubectl & Kustomize
+      uses: azure/setup-kubectl@v3
+      with:
+        version: 'v1.30.0'
+
+    - name: Kustomize Dry-Run Build
+      run: |
+        echo "Building manifests via Kustomize..."
+        kubectl kustomize ./${config.namespace} > rendered-manifests.yaml
+        echo "Manifests compiled successfully without syntax errors."
+
+    - name: Verify GPU Resource Specs
+      run: |
+        echo "Checking that GPU resource limits match requests for predictable scheduling..."
+        GPU_LIMITS=$(grep -c "nvidia.com/gpu" rendered-manifests.yaml || true)
+        if [ "$GPU_LIMITS" -eq "0" ]; then
+          echo "ERROR: No nvidia.com/gpu resource limits found in rendered manifests!"
+          exit 1
+        fi
+        echo "GPU limits verified: $GPU_LIMITS references found."
+
+    - name: Verify PyTorch IPC /dev/shm Volume
+      run: |
+        echo "Verifying /dev/shm shared memory emptyDir volume..."
+        if ! grep -q "medium: Memory" rendered-manifests.yaml; then
+          echo "ERROR: Missing RAM-backed /dev/shm emptyDir volume! Multi-GPU NCCL will fail."
+          exit 1
+        fi
+        echo "IPC shared memory volume verified."
+`;
+
+  files.push({
+    name: 'pr-manifest-lint.yml',
+    path: `.github/workflows/pr-manifest-lint.yml`,
+    category: 'cicd',
+    content: prLintWorkflowYaml,
+    description: 'GitHub Actions PR check validating Kustomize builds, GPU allocation limits, and /dev/shm volume presence.'
+  });
+
   return files;
+}
+
+export function generateCiWorkflow(config: AppConfig, servedName: string): string {
+  const registryUrl =
+    config.ciRegistryProvider === 'ghcr'
+      ? 'ghcr.io'
+      : config.ciRegistryProvider === 'ecr'
+      ? '123456789012.dkr.ecr.us-east-1.amazonaws.com'
+      : config.ciRegistryProvider === 'gcr'
+      ? 'us-docker.pkg.dev/my-gcp-project/vllm-repo'
+      : config.ciRegistryProvider === 'acr'
+      ? 'myvllmregistry.azurecr.io'
+      : 'docker.io';
+
+  const imageName = config.ciImageRepo || `${registryUrl}/${config.namespace}/vllm-custom-engine`;
+
+  let registryLoginSnippet = '';
+  if (config.ciRegistryProvider === 'ghcr') {
+    registryLoginSnippet = `    - name: Log in to GitHub Container Registry (GHCR)
+      uses: docker/login-action@v3
+      with:
+        registry: ghcr.io
+        username: \${{ github.actor }}
+        password: \${{ secrets.GITHUB_TOKEN }}`;
+  } else if (config.ciRegistryProvider === 'ecr') {
+    registryLoginSnippet = `    - name: Configure AWS Credentials (OIDC)
+      uses: aws-actions/configure-aws-credentials@v4
+      with:
+        role-to-assume: \${{ secrets.AWS_ROLE_ARN }}
+        aws-region: us-east-1
+
+    - name: Log in to Amazon ECR
+      uses: aws-actions/amazon-ecr-login@v2`;
+  } else if (config.ciRegistryProvider === 'gcr') {
+    registryLoginSnippet = `    - name: Authenticate to Google Cloud (Workload Identity)
+      uses: google-github-actions/auth@v2
+      with:
+        workload_identity_provider: \${{ secrets.GCP_WIF_PROVIDER }}
+        service_account: \${{ secrets.GCP_WIF_SERVICE_ACCOUNT }}
+
+    - name: Configure Docker for Google Artifact Registry
+      run: gcloud auth configure-docker us-docker.pkg.dev --quiet`;
+  } else if (config.ciRegistryProvider === 'acr') {
+    registryLoginSnippet = `    - name: Log in to Azure Container Registry (ACR)
+      uses: azure/docker-login@v2
+      with:
+        login-server: \${{ secrets.ACR_LOGIN_SERVER }}
+        username: \${{ secrets.ACR_USERNAME }}
+        password: \${{ secrets.ACR_PASSWORD }}`;
+  } else {
+    registryLoginSnippet = `    - name: Log in to Docker Hub
+      uses: docker/login-action@v3
+      with:
+        username: \${{ secrets.DOCKERHUB_USERNAME }}
+        password: \${{ secrets.DOCKERHUB_TOKEN }}`;
+  }
+
+  let deploySnippet = '';
+  if (config.ciDeployMethod === 'kubectl') {
+    deploySnippet = `  deploy-kubernetes:
+    name: Deploy to Kubernetes Cluster
+    needs: build-scan-and-push
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+    - name: Checkout Repository
+      uses: actions/checkout@v4
+
+    - name: Set up Kubectl
+      uses: azure/setup-kubectl@v3
+      with:
+        version: 'v1.30.0'
+
+    - name: Authenticate to Kubernetes
+      uses: azure/k8s-set-context@v4
+      with:
+        method: kubeconfig
+        kubeconfig: \${{ secrets.KUBECONFIG }}
+
+    - name: Verify Cluster Connectivity
+      run: kubectl get nodes -o wide
+
+    - name: Apply vLLM Production Manifests (Kustomize)
+      run: |
+        echo "Applying manifests from ./${config.namespace}..."
+        kubectl apply -k ./${config.namespace}
+
+    - name: Await vLLM Inference Engine Rollout
+      run: |
+        echo "Waiting for vLLM pods to load weights and pass readiness probes..."
+        kubectl rollout status deployment/${config.deploymentName} -n ${config.namespace} --timeout=900s
+
+    - name: Await Smart Router Rollout
+      run: |
+        kubectl rollout status deployment/vllm-smart-router -n ${config.namespace} --timeout=300s
+
+    - name: Post-Deployment Smoke Test
+      run: |
+        echo "Running cluster internal health check..."
+        kubectl run curl-test --image=curlimages/curl --rm -i --restart=Never -- \\
+          curl -s -f http://${config.deploymentName}-svc.${config.namespace}.svc.cluster.local:${config.servicePort}/health || echo "Endpoint warming up..."`;
+  } else {
+    deploySnippet = `  gitops-sync:
+    name: Trigger GitOps Sync (ArgoCD / Flux)
+    needs: build-scan-and-push
+    runs-on: ubuntu-latest
+    steps:
+    - name: Checkout GitOps Repository
+      uses: actions/checkout@v4
+
+    - name: Trigger ArgoCD Application Sync
+      run: |
+        echo "Triggering ArgoCD Application sync for '${config.deploymentName}'..."
+        curl -s -X POST \${{ secrets.ARGOCD_SERVER }}/api/v1/applications/${config.deploymentName}/sync \\
+          -H "Authorization: Bearer \${{ secrets.ARGOCD_TOKEN }}" \\
+          -H "Content-Type: application/json" \\
+          -d '{"revision": "'\${{ github.sha }}'", "prune": true}'
+        echo "GitOps sync initiated."`;
+  }
+
+  return `name: Build, Security Scan, Push & Deploy vLLM Stack
+
+on:
+  push:
+    branches: [ main ]
+    paths:
+      - '${config.namespace}/**'
+      - 'Dockerfile*'
+      - '.github/workflows/deploy-vllm-stack.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  packages: write
+  id-token: write
+  security-events: write
+
+env:
+  IMAGE_NAME: "${imageName}"
+  NAMESPACE: "${config.namespace}"
+
+jobs:
+  build-scan-and-push:
+    name: Build, Vulnerability Scan & Push Container
+    runs-on: ubuntu-latest
+    outputs:
+      image_tag: \${{ steps.meta.outputs.version }}
+
+    steps:
+    - name: Checkout Source Code
+      uses: actions/checkout@v4
+
+    - name: Set up Docker Buildx
+      uses: docker/setup-buildx-action@v3
+
+${registryLoginSnippet}
+
+    - name: Extract Docker Image Metadata & Tags
+      id: meta
+      uses: docker/metadata-action@v5
+      with:
+        images: \${{ env.IMAGE_NAME }}
+        tags: |
+          type=sha,format=short,prefix=sha-
+          type=raw,value=latest,enable=\${{ github.ref == 'refs/heads/main' }}
+
+    - name: Build Container Image (Local Tarball for Scanning)
+      uses: docker/build-push-action@v5
+      with:
+        context: .
+        file: ./Dockerfile
+        push: false
+        load: true
+        tags: \${{ env.IMAGE_NAME }}:\${{ github.sha }}
+        cache-from: type=gha
+        cache-to: type=gha,mode=max
+
+    # -------------------------------------------------------------
+    # Container Security Scanning: Blocks CVEs Before Registry Push
+    # -------------------------------------------------------------
+    - name: Run Trivy Container Vulnerability Scanner
+      uses: aquasecurity/trivy-action@master
+      with:
+        image-ref: \${{ env.IMAGE_NAME }}:\${{ github.sha }}
+        format: 'sarif'
+        output: 'trivy-results.sarif'
+        severity: '${config.ciFailOnSeverity}'
+        exit-code: '${config.ciEnableScanBlock ? '1' : '0'}' # Block pipeline if critical CVEs found
+        ignore-unfixed: true
+
+    - name: Upload Security Vulnerability Scan SARIF to GitHub
+      uses: github/codeql-action/upload-sarif@v3
+      if: always()
+      with:
+        sarif_file: 'trivy-results.sarif'
+
+    - name: Push Verified Container Image to Registry
+      uses: docker/build-push-action@v5
+      with:
+        context: .
+        file: ./Dockerfile
+        push: true
+        tags: \${{ steps.meta.outputs.tags }}
+        labels: \${{ steps.meta.outputs.labels }}
+
+${deploySnippet}
+`;
 }

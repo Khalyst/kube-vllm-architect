@@ -12,6 +12,7 @@ import { AutoscalingConfig } from './components/AutoscalingConfig';
 import { ManifestViewer } from './components/ManifestViewer';
 import { ValidationView } from './components/ValidationView';
 import { WasmSecurityView } from './components/WasmSecurityView';
+import { CiCdView } from './components/CiCdView';
 import { Sparkles, Terminal, Cpu, Zap, Download } from 'lucide-react';
 import JSZip from 'jszip';
 
@@ -73,7 +74,16 @@ export default function App() {
     deploymentName: 'vllm-inference',
     servicePort: 8000,
     containerImage: 'vllm/vllm-openai',
-    containerTag: 'v0.7.2'
+    containerTag: 'v0.7.2',
+
+    // CI/CD & GitOps Automation
+    ciRegistryProvider: 'ghcr',
+    ciImageRepo: '',
+    ciScanner: 'trivy',
+    ciFailOnSeverity: 'CRITICAL,HIGH',
+    ciDeployMethod: 'kubectl',
+    ciK8sClusterContext: 'production-us-east-1',
+    ciEnableScanBlock: true
   });
 
   const updateConfig = (patch: Partial<AppConfig>) => {
@@ -263,6 +273,14 @@ export default function App() {
           <AutoscalingConfig
             config={config}
             updateConfig={updateConfig}
+          />
+        )}
+
+        {activeTab === 'cicd' && (
+          <CiCdView
+            config={config}
+            updateConfig={updateConfig}
+            servedName={activePreset.repoId.split('/').pop() || 'model'}
           />
         )}
 

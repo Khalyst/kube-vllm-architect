@@ -96,6 +96,15 @@ export interface AppConfig {
   servicePort: number;
   containerImage: string;
   containerTag: string;
+
+  // CI/CD & GitOps Automation
+  ciRegistryProvider: 'ghcr' | 'ecr' | 'gcr' | 'dockerhub' | 'acr';
+  ciImageRepo: string;
+  ciScanner: 'trivy' | 'grype' | 'snyk';
+  ciFailOnSeverity: 'CRITICAL' | 'CRITICAL,HIGH';
+  ciDeployMethod: 'kubectl' | 'argocd' | 'flux';
+  ciK8sClusterContext: string;
+  ciEnableScanBlock: boolean;
 }
 
 export interface VramCalculationResult {
@@ -115,7 +124,7 @@ export interface VramCalculationResult {
 export interface GeneratedFile {
   name: string;
   path: string;
-  category: 'core' | 'storage' | 'autoscaling' | 'routing' | 'infrastructure' | 'package';
+  category: 'core' | 'storage' | 'autoscaling' | 'routing' | 'infrastructure' | 'package' | 'cicd';
   content: string;
   description: string;
 }
