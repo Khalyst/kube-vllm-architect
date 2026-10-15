@@ -1,0 +1,20 @@
+services:
+  kube-vllm-architect:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: kube-vllm-architect
+    restart: unless-stopped
+    ports:
+      - "3000:80"
+    environment:
+      - NODE_ENV=production
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost/"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 5s
+    labels:
+      - "app=kube-vllm-architect"
+      - "version=1.0.0"

@@ -1,0 +1,6 @@
+{
+  "name": "KubeVLLM Architect",
+  "description": "Production Kubernetes manifest generator and autoscaling architect for vLLM with smart KV cache routing, KEDA GPU autoscaling, and AI-agnostic model serving.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
