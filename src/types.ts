@@ -22,6 +22,12 @@ export interface ModelPreset {
   description: string;
 }
 
+export interface GpuPricing {
+  onDemand: number;
+  spot: number;
+  reserved1yr: number;
+}
+
 export interface GpuSpec {
   id: string;
   name: string;
@@ -33,6 +39,11 @@ export interface GpuSpec {
   gcpInstance: string;
   azureInstance: string;
   fp16Tflops: number;
+  hourlyPrice: {
+    aws: GpuPricing;
+    gcp: GpuPricing;
+    azure: GpuPricing;
+  };
 }
 
 export interface AppConfig {
@@ -119,6 +130,19 @@ export interface VramCalculationResult {
   tokensPerSecEstimate: number;
   recommendedGpuCount: number;
   recommendedTp: number;
+}
+
+export interface CostEstimationResult {
+  gpusPerReplica: number;
+  hourlyPerGpu: number;
+  hourlyPerReplica: number;
+  monthlyPerReplica24x7: number;
+  monthlyAtMinReplicas: number;
+  monthlyAtMaxReplicas: number;
+  monthlyEstimatedWithAutoscaling: number;
+  monthlySavingsVsStaticPeak: number;
+  monthlySavingsVsOnDemand: number;
+  costPerMillionTokens: number;
 }
 
 export interface GeneratedFile {

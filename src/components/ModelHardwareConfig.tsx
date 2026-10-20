@@ -3,6 +3,7 @@ import { AppConfig, ModelPreset, Precision, VramCalculationResult } from '../typ
 import { MODEL_PRESETS } from '../data/models';
 import { GPU_SPECS } from '../data/gpus';
 import { AlertCircle, CheckCircle, Cpu, Database, Info, Layers, Zap } from 'lucide-react';
+import { CostEstimationPanel } from './CostEstimationPanel';
 
 interface Props {
   config: AppConfig;
@@ -364,6 +365,13 @@ export const ModelHardwareConfig: React.FC<Props> = ({
           </div>
         </div>
       </div>
+
+      {/* Section 3: Cloud Cost Estimation & Infrastructure TCO */}
+      <CostEstimationPanel
+        config={config}
+        vram={vram}
+        updateConfig={updateConfig}
+      />
     </div>
   );
 };

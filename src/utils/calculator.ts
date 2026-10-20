@@ -1,4 +1,4 @@
-import { AppConfig, ModelPreset, Precision, VramCalculationResult } from '../types';
+import { AppConfig, CostEstimationResult, GpuSpec, ModelPreset, Precision, VramCalculationResult } from '../types';
 import { GPU_SPECS } from '../data/gpus';
 
 export function getBytesPerParam(precision: Precision): number {
@@ -82,5 +82,65 @@ export function calculateVramRequirements(
     tokensPerSecEstimate,
     recommendedGpuCount,
     recommendedTp
+  };
+}
+
+export function calculateCostEstimation(
+  config: AppConfig,
+  gpu: GpuSpec,
+  provider: 'aws' | 'gcp' | 'azure',
+  pricingTier: 'onDemand' | 'spot' | 'reserved1yr',
+  activeReplicaAverage: number,
+  tokensPerSecEstimate: number
+): CostEstimationResult {
+  const gpusPerReplica = config.tensorParallelSize * config.pipelineParallelSize;
+  const pricing = gpu.hourlyPrice[provider] || gpu.hourlyPrice.aws;
+  const hourlyPerGpu = pricing[pricingTier];
+  const hourlyOnDemandPerGpu = pricing.onDemand;
+
+  const hourlyPerReplica = hourlyPerGpu * gpusPerReplica;
+  const hourlyOnDemandPerReplica = hourlyOnDemandPerGpu * gpusPerReplica;
+
+  const hoursPerMonth = 730;
+
+  // Monthly 24x7 cost for a single replica
+  const monthlyPerReplica24x7 = Math.round(hourlyPerReplica * hoursPerMonth);
+
+  // Min replicas (supports scale-to-zero)
+  const monthlyAtMinReplicas = Math.round(config.minReplicas * hourlyPerReplica * hoursPerMonth);
+
+  // Max replicas peak 100% load
+  const monthlyAtMaxReplicas = Math.round(config.maxReplicas * hourlyPerReplica * hoursPerMonth);
+
+  // Estimated actual monthly with autoscaling duty cycle
+  const effectiveReplicas = config.enableAutoscaling ? activeReplicaAverage : 1;
+  const monthlyEstimatedWithAutoscaling = Math.round(effectiveReplicas * hourlyPerReplica * hoursPerMonth);
+
+  // Static Peak monthly cost using On-Demand (what users would pay without KEDA/Autoscaling)
+  const staticPeakOnDemand = Math.round(config.maxReplicas * hourlyOnDemandPerReplica * hoursPerMonth);
+  const monthlySavingsVsStaticPeak = Math.max(0, staticPeakOnDemand - monthlyEstimatedWithAutoscaling);
+
+  // Savings of chosen tier (e.g. Spot or Reserved) vs On-Demand for the same workload
+  const onDemandSameWorkload = Math.round(effectiveReplicas * hourlyOnDemandPerReplica * hoursPerMonth);
+  const monthlySavingsVsOnDemand = Math.max(0, onDemandSameWorkload - monthlyEstimatedWithAutoscaling);
+
+  // Cost per 1M tokens:
+  let costPerMillionTokens = 0;
+  if (tokensPerSecEstimate > 0) {
+    const tokensPerHour = tokensPerSecEstimate * 3600;
+    costPerMillionTokens = Math.round((hourlyPerReplica / tokensPerHour) * 1_000_000 * 100) / 100;
+  }
+
+  return {
+    gpusPerReplica,
+    hourlyPerGpu: Math.round(hourlyPerGpu * 100) / 100,
+    hourlyPerReplica: Math.round(hourlyPerReplica * 100) / 100,
+    monthlyPerReplica24x7,
+    monthlyAtMinReplicas,
+    monthlyAtMaxReplicas,
+    monthlyEstimatedWithAutoscaling,
+    monthlySavingsVsStaticPeak,
+    monthlySavingsVsOnDemand,
+    costPerMillionTokens
   };
 }

@@ -48,8 +48,10 @@ Deploying large language models (LLMs) on Kubernetes with **vLLM** requires navi
 - **GPU VRAM & Throughput Sizing Calculator**: Computes exact model weight footprints, CUDA overhead, available PagedAttention KV Cache pools, and max concurrent token capacity across NVIDIA H100, H200, A100, L40S, L4, A10G, T4, and AMD MI300X.
 - **Universal AI-Agnostic Model Support**: One-click presets for DeepSeek-R1 Distill (32B / 8B), Llama 3.3 70B, Qwen 2.5 (72B / 14B), Mistral Small 24B, Gemma 2, Phi-4, DeepSeek-V3 671B MoE, or custom HuggingFace / S3 / PVC models.
 - **KEDA Event-Driven Autoscaling**: Scales GPU worker pods dynamically based on live Prometheus metrics (`vllm:num_requests_waiting` and `vllm:gpu_cache_usage_factor`), with full **Scale-to-Zero ($0 idle GPU cost)** support.
+- **Cloud Cost Estimation & Infrastructure TCO**: Real-time monthly spend calculator comparing AWS EC2, GCP, and Azure pricing across On-Demand, Spot (up to 70% savings), and 1-Year Reserved/CUD tiers with interactive duty cycle and unit cost per 1M tokens.
 - **Modern Kubernetes Gateway API (`gateway.networking.k8s.io/v1`)**: Future-proof architecture replacing legacy Ingress NGINX (EOL March 2026) with standard `Gateway` and `HTTPRoute` resources using declarative `ResponseHeaderModifier` filters for browser WASM / WebGPU Cross-Origin Isolation (`COOP` & `COEP`).
 - **WASM Client Security & Envoy Guardrails**: Test client-side in-browser WASM PII redaction and generate Envoy WASM L7 prompt injection filters.
+- **Production CI/CD Pipelines**: Pre-configured GitHub Actions workflows featuring Trivy container CVE vulnerability scanning, multi-registry publishing (GHCR, AWS ECR, GCP WIF, ACR), and automated Kustomize rollouts.
 - **1-Click Export**: Download all manifests in a single ZIP package or apply directly using `kubectl apply -k .`.
 
 ---
