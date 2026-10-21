@@ -4,6 +4,7 @@ import { MODEL_PRESETS } from '../data/models';
 import { GPU_SPECS } from '../data/gpus';
 import { AlertCircle, CheckCircle, Cpu, Database, Info, Layers, Zap } from 'lucide-react';
 import { CostEstimationPanel } from './CostEstimationPanel';
+import { PerformanceEstimationPanel } from './PerformanceEstimationPanel';
 
 interface Props {
   config: AppConfig;
@@ -366,7 +367,14 @@ export const ModelHardwareConfig: React.FC<Props> = ({
         </div>
       </div>
 
-      {/* Section 3: Cloud Cost Estimation & Infrastructure TCO */}
+      {/* Section 3: Performance & Scalability Estimation */}
+      <PerformanceEstimationPanel
+        config={config}
+        preset={preset}
+        vram={vram}
+      />
+
+      {/* Section 4: Cloud Cost Estimation & Infrastructure TCO */}
       <CostEstimationPanel
         config={config}
         vram={vram}

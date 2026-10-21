@@ -83,7 +83,7 @@ export const CostEstimationPanel: React.FC<Props> = ({
         <div>
           <div className="flex items-center gap-2">
             <DollarSign className="w-4 h-4 text-emerald-400" />
-            <h3 className="text-sm font-semibold text-white">3. Cloud Cost Estimation & Infrastructure TCO</h3>
+            <h3 className="text-sm font-semibold text-white">4. Cloud Cost Estimation & Infrastructure TCO</h3>
           </div>
           <p className="text-xs text-neutral-400 mt-0.5">
             Real-time monthly cloud spend modeling across AWS, GCP, and Azure based on tensor parallelism and KEDA autoscaling.
