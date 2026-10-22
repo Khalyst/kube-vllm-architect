@@ -70,7 +70,11 @@ KubeVLLM Architect provides guaranteed infrastructure contracts across four esse
 - **Interactive Architecture & KV Caching Simulator**: Visually demonstrates how prompt-prefix routing avoids redundant matrix multiplication (prefill phase) and cuts Time-to-First-Token (TTFT) by up to 80%.
 - **GPU VRAM & Throughput Sizing Calculator**: Computes exact model weight footprints, CUDA overhead, available PagedAttention KV Cache pools, and max concurrent token capacity across NVIDIA H100, H200, A100, L40S, L4, A10G, T4, and AMD MI300X.
 - **Universal AI-Agnostic Model Support**: One-click presets for DeepSeek-R1 Distill (32B / 8B), Llama 3.3 70B, Qwen 2.5 (72B / 14B), Mistral Small 24B, Gemma 2, Phi-4, DeepSeek-V3 671B MoE, or custom HuggingFace / S3 / PVC models.
-- **Performance & Scalability Estimation (Recharts)**: Interactive charts modeling aggregate cluster throughput (tokens/s) and latency curves (TTFT & ITL) as pods scale out, comparing Smart Prefix Routing against cold prefill.
+- **Performance & Scalability Estimation (Recharts)**: Interactive simulation and visualization of the four core LLM serving metrics:
+  - **TTFT (Time To First Token)**: Time until the first token appears (prefill phase; cold prefill vs. warm KV prefix cache hit).
+  - **TPOT (Time Per Output Token)**: Generation pacing / inter-token latency during autoregressive decoding (ms/tok and tok/s/stream).
+  - **Throughput**: Aggregate tokens the system processes per second across all replicas and streams.
+  - **End-to-End Latency**: Total request turnaround duration from submission to final token (`E2E = Queue Delay + TTFT + [Output Tokens × TPOT]`).
 - **Cloud Cost Estimation & Infrastructure TCO**: Real-time monthly spend calculator comparing AWS EC2, GCP, and Azure pricing across On-Demand, Spot (up to 70% savings), and 1-Year Reserved/CUD tiers with interactive duty cycle and unit cost per 1M tokens.
 - **Modern Kubernetes Gateway API (`gateway.networking.k8s.io/v1`)**: Future-proof architecture replacing legacy Ingress NGINX (EOL March 2026) with standard `Gateway` and `HTTPRoute` resources using declarative `ResponseHeaderModifier` filters for browser WASM / WebGPU Cross-Origin Isolation (`COOP` & `COEP`).
 - **WASM Client Security & Envoy Guardrails**: Test client-side in-browser WASM PII redaction and generate Envoy WASM L7 prompt injection filters.

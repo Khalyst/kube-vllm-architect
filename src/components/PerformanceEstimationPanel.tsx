@@ -15,13 +15,27 @@ import {
   Tooltip,
   Legend
 } from 'recharts';
-import { Activity, Gauge, Zap, Clock, Users, ArrowUpRight, Sparkles, Sliders } from 'lucide-react';
+import { 
+  Activity, 
+  Gauge, 
+  Zap, 
+  Clock, 
+  Sparkles, 
+  ArrowUpRight, 
+  TrendingUp, 
+  Hourglass,
+  Layers,
+  CheckCircle2,
+  HelpCircle
+} from 'lucide-react';
 
 interface Props {
   config: AppConfig;
   preset: ModelPreset;
   vram: VramCalculationResult;
 }
+
+export type MetricTab = 'throughput' | 'ttft' | 'tpot' | 'e2e';
 
 export const PerformanceEstimationPanel: React.FC<Props> = ({
   config,
@@ -35,7 +49,7 @@ export const PerformanceEstimationPanel: React.FC<Props> = ({
   const [cacheHitRate, setCacheHitRate] = useState<number>(config.enablePrefixCaching ? 75 : 0);
   const [promptLength, setPromptLength] = useState<number>(1024);
   const [outputLength, setOutputLength] = useState<number>(256);
-  const [chartMode, setChartMode] = useState<'throughput' | 'latency'>('throughput');
+  const [activeMetricTab, setActiveMetricTab] = useState<MetricTab>('throughput');
 
   // Baseline per-replica token generation rate
   const baseTokensPerSec = Math.max(80, vram.tokensPerSecEstimate || 350);
@@ -50,7 +64,7 @@ export const PerformanceEstimationPanel: React.FC<Props> = ({
     const cachingMultiplier = 1 + (cacheHitRate / 100) * 1.6;
 
     for (let r = 1; r <= maxPods; r++) {
-      // Replicas * base throughput
+      // 1. Throughput calculation
       const throughputWithoutCache = Math.round(r * baseTokensPerSec);
       const throughputWithCache = Math.round(throughputWithoutCache * cachingMultiplier);
 
@@ -64,8 +78,8 @@ export const PerformanceEstimationPanel: React.FC<Props> = ({
         ? Math.round(Math.pow(saturationRatio - 1, 2) * 450 + (saturationRatio - 1) * 300)
         : Math.round(Math.max(0, saturationRatio * 20));
 
-      // Prefill calculation (Time-to-First-Token)
-      // Cold TTFT depends on prompt tokens and model parameters
+      // 2. TTFT (Time To First Token) - Prefill Phase
+      // Cold TTFT depends on prompt tokens and model parameter size
       const coldPrefillMs = Math.round(15 + (promptLength / (selectedGpu.bandwidthGBs * 0.4)) * (preset.paramsBillions / 10) * 8);
       // Warm TTFT is near constant (just hash table lookup and page table allocation)
       const warmPrefillMs = Math.round(18 + (promptLength / 1000) * 3);
@@ -74,23 +88,32 @@ export const PerformanceEstimationPanel: React.FC<Props> = ({
         (cacheHitRate / 100) * warmPrefillMs + (1 - cacheHitRate / 100) * coldPrefillMs
       );
 
-      // Inter-token latency (ITL) per output token (decode phase)
-      // Slows slightly under higher concurrency per replica
-      const itlMs = Math.round((14 + Math.min(25, loadPerReplica * 0.25)) * 10) / 10;
+      // 3. TPOT (Time Per Output Token) - Decode Phase (also known as ITL)
+      // Time in ms to generate each subsequent token during autoregressive decoding
+      const tpotMs = Math.round((14 + Math.min(25, loadPerReplica * 0.25)) * 10) / 10;
+      const tokensPerSecPerStream = Math.round((1000 / tpotMs) * 10) / 10;
 
-      // End-to-End latency for typical request
-      const e2eLatencyMs = Math.round(queueDelayMs + effectiveTtftMs + (outputLength * itlMs));
+      // 4. End-to-End Latency
+      // Total duration from initial request submission until the final token is generated
+      const generationDurationMs = Math.round(outputLength * tpotMs);
+      const e2eLatencyMs = Math.round(queueDelayMs + effectiveTtftMs + generationDurationMs);
 
       data.push({
         replicas: `${r} Pod${r > 1 ? 's' : ''}`,
         replicaCount: r,
+        // Metric 1: Throughput
         throughputWithCache,
         throughputWithoutCache,
+        // Metric 2: TTFT
         ttft: effectiveTtftMs,
         coldTtft: coldPrefillMs,
         warmTtft: warmPrefillMs,
-        itl: itlMs,
+        // Metric 3: TPOT
+        tpot: tpotMs,
+        tokensPerSecPerStream,
+        // Metric 4: End-to-End Latency
         queueDelay: queueDelayMs,
+        generationDuration: generationDurationMs,
         e2eLatency: e2eLatencyMs,
         maxSupportedConcurrency: r * capacityPerReplica
       });
@@ -105,41 +128,196 @@ export const PerformanceEstimationPanel: React.FC<Props> = ({
   const peakSnapshot = performanceData[performanceData.length - 1];
 
   return (
-    <div className="border border-neutral-800 rounded-lg p-5 bg-neutral-900/50 space-y-5">
+    <div className="border border-neutral-800 rounded-lg p-5 bg-neutral-900/50 space-y-6">
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-neutral-800">
         <div>
           <div className="flex items-center gap-2">
             <Activity className="w-4 h-4 text-sky-400" />
-            <h3 className="text-sm font-semibold text-white">3. Performance & Scalability Estimation</h3>
+            <h3 className="text-sm font-semibold text-white">3. Inference Metrics & Performance Visualization</h3>
           </div>
           <p className="text-xs text-neutral-400 mt-0.5">
-            Predicts aggregate cluster throughput (tokens/s), Time-to-First-Token (TTFT), and queue delay across replica counts.
+            Real-time simulation and visualization of the four core LLM serving metrics: TTFT, TPOT, Throughput, and End-to-End Latency.
           </p>
         </div>
 
-        {/* View Toggle */}
-        <div className="flex items-center gap-1.5 p-1 bg-neutral-950 border border-neutral-800 rounded">
+        {/* View Toggle Tabs for the 4 Core Metrics */}
+        <div className="flex items-center gap-1 p-1 bg-neutral-950 border border-neutral-800 rounded-lg overflow-x-auto scrollbar-none">
           <button
-            onClick={() => setChartMode('throughput')}
-            className={`px-3 py-1 text-xs font-medium rounded transition-colors ${
-              chartMode === 'throughput'
-                ? 'bg-sky-600 text-white shadow-sm'
+            onClick={() => setActiveMetricTab('throughput')}
+            className={`px-2.5 py-1 text-xs font-medium rounded transition-colors whitespace-nowrap ${
+              activeMetricTab === 'throughput'
+                ? 'bg-sky-600 text-white shadow-sm font-semibold'
                 : 'text-neutral-400 hover:text-white'
             }`}
           >
             Throughput (tok/s)
           </button>
           <button
-            onClick={() => setChartMode('latency')}
-            className={`px-3 py-1 text-xs font-medium rounded transition-colors ${
-              chartMode === 'latency'
-                ? 'bg-sky-600 text-white shadow-sm'
+            onClick={() => setActiveMetricTab('ttft')}
+            className={`px-2.5 py-1 text-xs font-medium rounded transition-colors whitespace-nowrap ${
+              activeMetricTab === 'ttft'
+                ? 'bg-emerald-600 text-white shadow-sm font-semibold'
                 : 'text-neutral-400 hover:text-white'
             }`}
           >
-            Latency & TTFT (ms)
+            TTFT (First Token)
           </button>
+          <button
+            onClick={() => setActiveMetricTab('tpot')}
+            className={`px-2.5 py-1 text-xs font-medium rounded transition-colors whitespace-nowrap ${
+              activeMetricTab === 'tpot'
+                ? 'bg-amber-600 text-white shadow-sm font-semibold'
+                : 'text-neutral-400 hover:text-white'
+            }`}
+          >
+            TPOT (Per Output Token)
+          </button>
+          <button
+            onClick={() => setActiveMetricTab('e2e')}
+            className={`px-2.5 py-1 text-xs font-medium rounded transition-colors whitespace-nowrap ${
+              activeMetricTab === 'e2e'
+                ? 'bg-indigo-600 text-white shadow-sm font-semibold'
+                : 'text-neutral-400 hover:text-white'
+            }`}
+          >
+            End-to-End Latency
+          </button>
+        </div>
+      </div>
+
+      {/* 4 Core Inference Metrics Cards (Directly matching user image) */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+        {/* Metric 1: TTFT */}
+        <div 
+          onClick={() => setActiveMetricTab('ttft')}
+          className={`p-4 rounded-lg border transition-all cursor-pointer ${
+            activeMetricTab === 'ttft'
+              ? 'bg-emerald-950/30 border-emerald-500 shadow-sm'
+              : 'bg-neutral-950 border-neutral-800 hover:border-neutral-700'
+          }`}
+        >
+          <div className="flex items-center justify-between text-xs mb-1">
+            <span className="font-semibold text-emerald-400 flex items-center gap-1.5">
+              <Clock className="w-3.5 h-3.5" />
+              TTFT
+            </span>
+            <span className="text-[10px] uppercase font-mono px-1.5 py-0.2 rounded bg-emerald-500/10 text-emerald-300">
+              Prefill
+            </span>
+          </div>
+          <div className="text-[11px] font-medium text-neutral-300">Time To First Token</div>
+          <div className="text-[10px] text-neutral-400 mt-0.5 leading-snug">
+            Time until the first token appears
+          </div>
+          <div className="mt-3 flex items-baseline gap-1.5 font-mono">
+            <span className="text-2xl font-bold text-white tabular-nums">
+              {currentSnapshot.warmTtft}
+            </span>
+            <span className="text-xs text-neutral-400">ms (warm)</span>
+          </div>
+          <div className="text-[10px] text-neutral-500 mt-1 font-mono">
+            vs {currentSnapshot.coldTtft} ms cold prefill
+          </div>
+        </div>
+
+        {/* Metric 2: TPOT */}
+        <div 
+          onClick={() => setActiveMetricTab('tpot')}
+          className={`p-4 rounded-lg border transition-all cursor-pointer ${
+            activeMetricTab === 'tpot'
+              ? 'bg-amber-950/30 border-amber-500 shadow-sm'
+              : 'bg-neutral-950 border-neutral-800 hover:border-neutral-700'
+          }`}
+        >
+          <div className="flex items-center justify-between text-xs mb-1">
+            <span className="font-semibold text-amber-400 flex items-center gap-1.5">
+              <Hourglass className="w-3.5 h-3.5" />
+              TPOT
+            </span>
+            <span className="text-[10px] uppercase font-mono px-1.5 py-0.2 rounded bg-amber-500/10 text-amber-300">
+              Decode
+            </span>
+          </div>
+          <div className="text-[11px] font-medium text-neutral-300">Time Per Output Token</div>
+          <div className="text-[10px] text-neutral-400 mt-0.5 leading-snug">
+            How quickly tokens arrive during generation
+          </div>
+          <div className="mt-3 flex items-baseline gap-1.5 font-mono">
+            <span className="text-2xl font-bold text-white tabular-nums">
+              {currentSnapshot.tpot}
+            </span>
+            <span className="text-xs text-neutral-400">ms / tok</span>
+          </div>
+          <div className="text-[10px] text-neutral-500 mt-1 font-mono">
+            ~{currentSnapshot.tokensPerSecPerStream} tokens/sec per user stream
+          </div>
+        </div>
+
+        {/* Metric 3: Throughput */}
+        <div 
+          onClick={() => setActiveMetricTab('throughput')}
+          className={`p-4 rounded-lg border transition-all cursor-pointer ${
+            activeMetricTab === 'throughput'
+              ? 'bg-sky-950/30 border-sky-500 shadow-sm'
+              : 'bg-neutral-950 border-neutral-800 hover:border-neutral-700'
+          }`}
+        >
+          <div className="flex items-center justify-between text-xs mb-1">
+            <span className="font-semibold text-sky-400 flex items-center gap-1.5">
+              <TrendingUp className="w-3.5 h-3.5" />
+              Throughput
+            </span>
+            <span className="text-[10px] uppercase font-mono px-1.5 py-0.2 rounded bg-sky-500/10 text-sky-300">
+              Cluster Capacity
+            </span>
+          </div>
+          <div className="text-[11px] font-medium text-neutral-300">System Throughput</div>
+          <div className="text-[10px] text-neutral-400 mt-0.5 leading-snug">
+            How much the system processes per second
+          </div>
+          <div className="mt-3 flex items-baseline gap-1.5 font-mono">
+            <span className="text-2xl font-bold text-white tabular-nums">
+              {peakSnapshot.throughputWithCache.toLocaleString()}
+            </span>
+            <span className="text-xs text-neutral-400">tok / s</span>
+          </div>
+          <div className="text-[10px] text-neutral-500 mt-1 font-mono">
+            Across {maxPods} pods ({cacheHitRate}% cache hit)
+          </div>
+        </div>
+
+        {/* Metric 4: End-to-End Latency */}
+        <div 
+          onClick={() => setActiveMetricTab('e2e')}
+          className={`p-4 rounded-lg border transition-all cursor-pointer ${
+            activeMetricTab === 'e2e'
+              ? 'bg-indigo-950/30 border-indigo-500 shadow-sm'
+              : 'bg-neutral-950 border-neutral-800 hover:border-neutral-700'
+          }`}
+        >
+          <div className="flex items-center justify-between text-xs mb-1">
+            <span className="font-semibold text-indigo-400 flex items-center gap-1.5">
+              <Gauge className="w-3.5 h-3.5" />
+              End-to-End Latency
+            </span>
+            <span className="text-[10px] uppercase font-mono px-1.5 py-0.2 rounded bg-indigo-500/10 text-indigo-300">
+              Total E2E
+            </span>
+          </div>
+          <div className="text-[11px] font-medium text-neutral-300">Total Response Latency</div>
+          <div className="text-[10px] text-neutral-400 mt-0.5 leading-snug">
+            Total time from request to finished response
+          </div>
+          <div className="mt-3 flex items-baseline gap-1.5 font-mono">
+            <span className="text-2xl font-bold text-white tabular-nums">
+              {(currentSnapshot.e2eLatency / 1000).toFixed(2)}
+            </span>
+            <span className="text-xs text-neutral-400">seconds</span>
+          </div>
+          <div className="text-[10px] text-neutral-500 mt-1 font-mono">
+            TTFT ({currentSnapshot.ttft}ms) + Decode ({(currentSnapshot.generationDuration / 1000).toFixed(2)}s)
+          </div>
         </div>
       </div>
 
@@ -148,7 +326,7 @@ export const PerformanceEstimationPanel: React.FC<Props> = ({
         {/* Concurrent Clients */}
         <div className="space-y-1.5">
           <div className="flex items-center justify-between">
-            <span className="text-neutral-300 font-medium">Simulated Concurrency</span>
+            <span className="text-neutral-300 font-medium">Active Concurrency</span>
             <span className="font-mono text-sky-400 font-semibold tabular-nums">{concurrency} users</span>
           </div>
           <input
@@ -160,7 +338,7 @@ export const PerformanceEstimationPanel: React.FC<Props> = ({
             onChange={(e) => setConcurrency(Number(e.target.value))}
             className="w-full accent-sky-500"
           />
-          <div className="text-[10px] text-neutral-500">Active concurrent HTTP requests</div>
+          <div className="text-[10px] text-neutral-500">Affects queue delay &amp; TPOT decode speed</div>
         </div>
 
         {/* Cache Hit Rate */}
@@ -179,14 +357,14 @@ export const PerformanceEstimationPanel: React.FC<Props> = ({
             className="w-full accent-emerald-500"
           />
           <div className="text-[10px] text-neutral-500">
-            {cacheHitRate > 0 ? 'Smart Prefix Caching active' : 'Zero cache affinity (cold)'}
+            {cacheHitRate > 0 ? 'Prefix caching accelerates TTFT & Throughput' : 'Cold prefill on every request'}
           </div>
         </div>
 
         {/* Prompt Length */}
         <div className="space-y-1.5">
           <div className="flex items-center justify-between">
-            <span className="text-neutral-300 font-medium">Prompt Context Size</span>
+            <span className="text-neutral-300 font-medium">Input Prompt Size</span>
             <span className="font-mono text-neutral-200 tabular-nums">{promptLength} tokens</span>
           </div>
           <select
@@ -194,18 +372,18 @@ export const PerformanceEstimationPanel: React.FC<Props> = ({
             onChange={(e) => setPromptLength(Number(e.target.value))}
             className="w-full bg-neutral-900 border border-neutral-700 rounded px-2.5 py-1 text-xs text-white font-mono"
           >
-            <option value="512">512 tokens (Short Query)</option>
+            <option value="512">512 tokens (Short Prompt)</option>
             <option value="1024">1,024 tokens (Standard Chat)</option>
-            <option value="2048">2,048 tokens (Document QA)</option>
+            <option value="2048">2,048 tokens (Document QA / RAG)</option>
             <option value="4096">4,096 tokens (Extended Context)</option>
           </select>
-          <div className="text-[10px] text-neutral-500">Input prefill token payload</div>
+          <div className="text-[10px] text-neutral-500">Determines prefill computation load</div>
         </div>
 
         {/* Output Generation Length */}
         <div className="space-y-1.5">
           <div className="flex items-center justify-between">
-            <span className="text-neutral-300 font-medium">Output Tokens</span>
+            <span className="text-neutral-300 font-medium">Output Generated Tokens</span>
             <span className="font-mono text-neutral-200 tabular-nums">{outputLength} tokens</span>
           </div>
           <select
@@ -214,85 +392,23 @@ export const PerformanceEstimationPanel: React.FC<Props> = ({
             className="w-full bg-neutral-900 border border-neutral-700 rounded px-2.5 py-1 text-xs text-white font-mono"
           >
             <option value="128">128 tokens (Concise summary)</option>
-            <option value="256">256 tokens (Standard answer)</option>
-            <option value="512">512 tokens (Long code/reasoning)</option>
-            <option value="1024">1,024 tokens (Detailed output)</option>
+            <option value="256">256 tokens (Standard response)</option>
+            <option value="512">512 tokens (Long code / reasoning)</option>
+            <option value="1024">1,024 tokens (Deep response)</option>
           </select>
-          <div className="text-[10px] text-neutral-500">Autoregressive decode tokens</div>
+          <div className="text-[10px] text-neutral-500">Multiplied by TPOT to calculate E2E latency</div>
         </div>
       </div>
 
-      {/* KPI Cards Grid */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
-        {/* Peak Cluster Throughput */}
-        <div className="p-4 rounded-lg bg-neutral-950 border border-neutral-800 space-y-1">
-          <div className="text-[11px] uppercase tracking-wider text-neutral-400 font-mono flex items-center justify-between">
-            <span>Peak Cluster Throughput</span>
-            <Zap className="w-3.5 h-3.5 text-sky-400" />
-          </div>
-          <div className="text-2xl font-bold text-white font-mono tabular-nums">
-            {peakSnapshot.throughputWithCache.toLocaleString()}
-            <span className="text-xs text-neutral-400 font-normal"> tok/s</span>
-          </div>
-          <div className="text-[10px] text-neutral-400 font-mono">
-            At {maxPods} pods ({cacheHitRate}% cache hit rate)
-          </div>
-        </div>
-
-        {/* Warm TTFT (Prefix Hit) */}
-        <div className="p-4 rounded-lg bg-neutral-950 border border-neutral-800 space-y-1">
-          <div className="text-[11px] uppercase tracking-wider text-neutral-400 font-mono flex items-center justify-between">
-            <span>Warm Cache TTFT</span>
-            <Sparkles className="w-3.5 h-3.5 text-emerald-400" />
-          </div>
-          <div className="text-2xl font-bold text-emerald-400 font-mono tabular-nums">
-            {currentSnapshot.warmTtft}
-            <span className="text-xs text-neutral-400 font-normal"> ms</span>
-          </div>
-          <div className="text-[10px] text-neutral-400 font-mono">
-            vs {currentSnapshot.coldTtft} ms cold prefill ({(100 - (currentSnapshot.warmTtft / currentSnapshot.coldTtft) * 100).toFixed(0)}% faster)
-          </div>
-        </div>
-
-        {/* Inter-Token Latency (ITL) */}
-        <div className="p-4 rounded-lg bg-neutral-950 border border-neutral-800 space-y-1">
-          <div className="text-[11px] uppercase tracking-wider text-neutral-400 font-mono flex items-center justify-between">
-            <span>Decode Latency (ITL)</span>
-            <Clock className="w-3.5 h-3.5 text-amber-400" />
-          </div>
-          <div className="text-2xl font-bold text-white font-mono tabular-nums">
-            {currentSnapshot.itl}
-            <span className="text-xs text-neutral-400 font-normal"> ms/tok</span>
-          </div>
-          <div className="text-[10px] text-neutral-400 font-mono">
-            ~{(1000 / currentSnapshot.itl).toFixed(0)} tokens/sec per user stream
-          </div>
-        </div>
-
-        {/* End-to-End Latency */}
-        <div className="p-4 rounded-lg bg-neutral-950 border border-neutral-800 space-y-1">
-          <div className="text-[11px] uppercase tracking-wider text-neutral-400 font-mono flex items-center justify-between">
-            <span>Avg E2E Response Time</span>
-            <Gauge className="w-3.5 h-3.5 text-indigo-400" />
-          </div>
-          <div className="text-2xl font-bold text-sky-300 font-mono tabular-nums">
-            {(currentSnapshot.e2eLatency / 1000).toFixed(2)}
-            <span className="text-xs text-neutral-400 font-normal"> sec</span>
-          </div>
-          <div className="text-[10px] text-neutral-400 font-mono">
-            For {outputLength} tokens output @ {concurrency} users
-          </div>
-        </div>
-      </div>
-
-      {/* Main Chart Visualization */}
+      {/* Main Chart Visualization Section for the Selected Metric */}
       <div className="p-4 rounded-lg bg-neutral-950 border border-neutral-800 space-y-3">
         <div className="flex items-center justify-between text-xs">
           <div className="flex items-center gap-2">
             <span className="font-semibold text-neutral-200">
-              {chartMode === 'throughput'
-                ? 'Throughput Scaling (tokens/s vs. Replica Count)'
-                : 'Latency Curve & Queue Delay Breakdown (ms vs. Replica Count)'}
+              {activeMetricTab === 'throughput' && 'Throughput Scaling (System Tokens/sec vs. Replica Count)'}
+              {activeMetricTab === 'ttft' && 'TTFT: Time To First Token Comparison (Warm Cache vs. Cold Prefill)'}
+              {activeMetricTab === 'tpot' && 'TPOT: Time Per Output Token / Inter-Token Generation Latency'}
+              {activeMetricTab === 'e2e' && 'End-to-End Latency: Breakdown from Request to Finished Response'}
             </span>
           </div>
           <span className="text-neutral-500 font-mono text-[11px]">
@@ -301,7 +417,8 @@ export const PerformanceEstimationPanel: React.FC<Props> = ({
         </div>
 
         <div className="h-[280px] w-full text-xs">
-          {chartMode === 'throughput' ? (
+          {/* TAB 1: THROUGHPUT */}
+          {activeMetricTab === 'throughput' && (
             <ResponsiveContainer width="100%" height="100%">
               <AreaChart data={performanceData} margin={{ top: 10, right: 15, left: 10, bottom: 5 }}>
                 <defs>
@@ -343,7 +460,10 @@ export const PerformanceEstimationPanel: React.FC<Props> = ({
                 />
               </AreaChart>
             </ResponsiveContainer>
-          ) : (
+          )}
+
+          {/* TAB 2: TTFT (Time To First Token) */}
+          {activeMetricTab === 'ttft' && (
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={performanceData} margin={{ top: 10, right: 15, left: 10, bottom: 5 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#262626" />
@@ -354,19 +474,110 @@ export const PerformanceEstimationPanel: React.FC<Props> = ({
                   formatter={(val: any, name: any) => [`${val} ms`, name]}
                 />
                 <Legend wrapperStyle={{ fontSize: '11px', paddingTop: '8px' }} />
-                <Bar dataKey="ttft" name="Time-to-First-Token (TTFT)" fill="#10b981" radius={[3, 3, 0, 0]} stackId="a" />
-                <Bar dataKey="queueDelay" name="Queue Scheduler Delay" fill="#ef4444" radius={[3, 3, 0, 0]} stackId="a" />
+                <Bar dataKey="warmTtft" name="Warm Prefix Cache TTFT" fill="#10b981" radius={[3, 3, 0, 0]} />
+                <Bar dataKey="coldTtft" name="Cold Prefill TTFT (No Cache)" fill="#64748b" radius={[3, 3, 0, 0]} />
+                <Bar dataKey="queueDelay" name="Queue Scheduler Delay" fill="#ef4444" radius={[3, 3, 0, 0]} />
+              </BarChart>
+            </ResponsiveContainer>
+          )}
+
+          {/* TAB 3: TPOT (Time Per Output Token) */}
+          {activeMetricTab === 'tpot' && (
+            <ResponsiveContainer width="100%" height="100%">
+              <LineChart data={performanceData} margin={{ top: 10, right: 15, left: 10, bottom: 5 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#262626" />
+                <XAxis dataKey="replicas" stroke="#737373" tick={{ fill: '#a3a3a3', fontSize: 11 }} />
+                <YAxis 
+                  yAxisId="left" 
+                  stroke="#f59e0b" 
+                  tick={{ fill: '#f59e0b', fontSize: 11 }} 
+                  tickFormatter={(val) => `${val} ms/tok`} 
+                  domain={['dataMin - 5', 'dataMax + 10']}
+                />
+                <YAxis 
+                  yAxisId="right" 
+                  orientation="right" 
+                  stroke="#38bdf8" 
+                  tick={{ fill: '#38bdf8', fontSize: 11 }} 
+                  tickFormatter={(val) => `${val} tok/s`} 
+                />
+                <Tooltip
+                  contentStyle={{ backgroundColor: '#0a0a0a', borderColor: '#262626', borderRadius: '6px', fontSize: '11px', color: '#e5e5e5' }}
+                  formatter={(val: any, name: any) => [
+                    name.includes('TPOT') ? `${val} ms per output token` : `${val} tokens/sec per stream`,
+                    name
+                  ]}
+                />
+                <Legend wrapperStyle={{ fontSize: '11px', paddingTop: '8px' }} />
+                <Line
+                  yAxisId="left"
+                  type="monotone"
+                  dataKey="tpot"
+                  name="TPOT (Time Per Output Token - ms/tok)"
+                  stroke="#f59e0b"
+                  strokeWidth={2.5}
+                  dot={{ r: 4, fill: '#f59e0b' }}
+                />
+                <Line
+                  yAxisId="right"
+                  type="monotone"
+                  dataKey="tokensPerSecPerStream"
+                  name="Per-User Stream Speed (Tokens/s)"
+                  stroke="#38bdf8"
+                  strokeWidth={2}
+                  strokeDasharray="3 3"
+                  dot={{ r: 3, fill: '#38bdf8' }}
+                />
+              </LineChart>
+            </ResponsiveContainer>
+          )}
+
+          {/* TAB 4: END-TO-END LATENCY */}
+          {activeMetricTab === 'e2e' && (
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={performanceData} margin={{ top: 10, right: 15, left: 10, bottom: 5 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#262626" />
+                <XAxis dataKey="replicas" stroke="#737373" tick={{ fill: '#a3a3a3', fontSize: 11 }} />
+                <YAxis stroke="#737373" tick={{ fill: '#a3a3a3', fontSize: 11 }} tickFormatter={(val) => `${val} ms`} />
+                <Tooltip
+                  contentStyle={{ backgroundColor: '#0a0a0a', borderColor: '#262626', borderRadius: '6px', fontSize: '11px', color: '#e5e5e5' }}
+                  formatter={(val: any, name: any) => [`${val} ms`, name]}
+                />
+                <Legend wrapperStyle={{ fontSize: '11px', paddingTop: '8px' }} />
+                <Bar dataKey="queueDelay" name="Queue Delay" fill="#ef4444" stackId="a" />
+                <Bar dataKey="ttft" name="TTFT (Time To First Token)" fill="#10b981" stackId="a" />
+                <Bar dataKey="generationDuration" name={`Output Decode (${outputLength} toks × TPOT)`} fill="#6366f1" radius={[3, 3, 0, 0]} stackId="a" />
               </BarChart>
             </ResponsiveContainer>
           )}
         </div>
       </div>
 
-      {/* Engineering Takeaway Note */}
-      <div className="p-3 bg-neutral-950 border border-neutral-800 rounded text-xs text-neutral-400 flex items-start gap-2">
-        <ArrowUpRight className="w-4 h-4 text-sky-400 shrink-0 mt-0.5" />
-        <div className="leading-relaxed">
-          <strong className="text-neutral-200">Scaling Dynamics Insight:</strong> Throughput scales linearly with replica count, while smart prefix caching adds an additional <span className="text-sky-300 font-mono font-medium">~2.2x multiplier</span> by eliminating duplicate prompt matrix multiplications. Under high traffic concurrency ({concurrency} users), scaling past <span className="text-emerald-400 font-mono font-medium">{Math.ceil(concurrency / 60)} replicas</span> eliminates scheduler queue starvation and keeps TTFT below 50ms.
+      {/* Educational Formula & Anatomy Bar */}
+      <div className="p-4 bg-neutral-950 border border-neutral-800 rounded-lg space-y-3">
+        <div className="text-xs font-semibold text-white flex items-center gap-2">
+          <HelpCircle className="w-3.5 h-3.5 text-sky-400" />
+          <span>Inference Metrics Relationship &amp; Mathematical Anatomy</span>
+        </div>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-xs text-neutral-300">
+          <div className="p-2.5 rounded bg-neutral-900 border border-neutral-800/80">
+            <span className="text-indigo-400 font-semibold font-mono">End-to-End Latency Formula:</span>
+            <div className="mt-1 font-mono text-[11px] text-neutral-200 bg-neutral-950 p-2 rounded">
+              E2E = Queue Delay + TTFT + (Output Tokens × TPOT)
+            </div>
+            <div className="text-[10px] text-neutral-400 mt-1">
+              TTFT handles prompt processing (prefill), while TPOT dictates output generation pacing.
+            </div>
+          </div>
+          <div className="p-2.5 rounded bg-neutral-900 border border-neutral-800/80">
+            <span className="text-sky-400 font-semibold font-mono">System Throughput vs. TPOT:</span>
+            <div className="mt-1 font-mono text-[11px] text-neutral-200 bg-neutral-950 p-2 rounded">
+              Throughput = (Active Concurrent Requests × 1000) / TPOT
+            </div>
+            <div className="text-[10px] text-neutral-400 mt-1">
+              vLLM continuous batching and PagedAttention maximize overall system throughput while maintaining low individual TPOT.
+            </div>
+          </div>
         </div>
       </div>
     </div>
