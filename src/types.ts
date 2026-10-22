@@ -116,6 +116,15 @@ export interface AppConfig {
   ciDeployMethod: 'kubectl' | 'argocd' | 'flux';
   ciK8sClusterContext: string;
   ciEnableScanBlock: boolean;
+
+  // Enterprise Guarantees & Multi-Engine Experimentation
+  primaryEngine: 'vllm' | 'tensorrt' | 'onnx' | 'sglang';
+  canaryEngine: 'none' | 'tensorrt' | 'onnx' | 'vllm';
+  canaryTrafficWeight: number;
+  enablePdb: boolean;
+  pdbMinAvailable: number;
+  enableServiceMonitor: boolean;
+  alertQueueBacklogThreshold: number;
 }
 
 export interface VramCalculationResult {

@@ -13,6 +13,7 @@ import { ManifestViewer } from './components/ManifestViewer';
 import { ValidationView } from './components/ValidationView';
 import { WasmSecurityView } from './components/WasmSecurityView';
 import { CiCdView } from './components/CiCdView';
+import { EnterpriseGuaranteesView } from './components/EnterpriseGuaranteesView';
 import { Sparkles, Terminal, Cpu, Zap, Download } from 'lucide-react';
 import JSZip from 'jszip';
 
@@ -83,7 +84,16 @@ export default function App() {
     ciFailOnSeverity: 'CRITICAL,HIGH',
     ciDeployMethod: 'kubectl',
     ciK8sClusterContext: 'production-us-east-1',
-    ciEnableScanBlock: true
+    ciEnableScanBlock: true,
+
+    // Enterprise Guarantees & Multi-Engine Experimentation
+    primaryEngine: 'vllm',
+    canaryEngine: 'none',
+    canaryTrafficWeight: 10,
+    enablePdb: true,
+    pdbMinAvailable: 1,
+    enableServiceMonitor: true,
+    alertQueueBacklogThreshold: 10
   });
 
   const updateConfig = (patch: Partial<AppConfig>) => {
@@ -272,6 +282,14 @@ export default function App() {
         {activeTab === 'autoscaling' && (
           <AutoscalingConfig
             config={config}
+            updateConfig={updateConfig}
+          />
+        )}
+
+        {activeTab === 'enterprise' && (
+          <EnterpriseGuaranteesView
+            config={config}
+            preset={activePreset}
             updateConfig={updateConfig}
           />
         )}

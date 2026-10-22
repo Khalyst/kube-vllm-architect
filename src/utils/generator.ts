@@ -733,7 +733,132 @@ spec:
     description: 'Kubernetes Gateway API (Gateway & HTTPRoute) with standard ResponseHeaderModifier for WASM COOP/COEP isolation and Envoy WASM prompt filter.'
   });
 
-  // 9. Kustomization package
+  // 09. Enterprise Scalability Guarantee: PodDisruptionBudget for Zero-Downtime Node Maintenance
+  const pdbManifest = `apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: ${config.deploymentName}-pdb
+  namespace: ${config.namespace}
+  labels:
+    app.kubernetes.io/name: vllm-engine
+    app.kubernetes.io/part-of: enterprise-sla-guarantee
+spec:
+  minAvailable: ${config.pdbMinAvailable || 1}
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: vllm-engine
+      app.kubernetes.io/instance: ${config.deploymentName}
+`;
+
+  files.push({
+    name: '09-pod-disruption-budget.yaml',
+    path: `${config.namespace}/09-pod-disruption-budget.yaml`,
+    category: 'core',
+    content: pdbManifest,
+    description: 'Enterprise Scalability Guarantee: PodDisruptionBudget ensuring minimum available replicas during Karpenter node reclaims or cluster upgrades.'
+  });
+
+  // 10. Enterprise Experimentation Guarantee: Multi-Engine Canary & Traffic Splitting
+  const canaryManifest = `# Enterprise Experimentation Guarantee:
+# Clean Decoupled Serving Layer allows zero-downtime A/B testing and engine swapping
+# (vLLM vs. TensorRT-LLM vs. ONNX Runtime GenAI) behind the exact same upstream API endpoint.
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: vllm-multi-engine-experiment
+  namespace: ${config.namespace}
+  labels:
+    app.kubernetes.io/name: vllm-gateway
+    app.kubernetes.io/part-of: enterprise-experimentation
+spec:
+  parentRefs:
+  - name: vllm-api-gateway
+    sectionName: http
+  rules:
+  - matches:
+    - path:
+        type: PathPrefix
+        value: /v1/chat/completions
+    backendRefs:
+    - name: ${config.deploymentName}-svc
+      port: ${config.servicePort}
+      weight: ${config.canaryEngine !== 'none' ? 100 - config.canaryTrafficWeight : 100}
+    ${
+      config.canaryEngine !== 'none'
+        ? `- name: ${config.canaryEngine}-inference-svc
+      port: 8000
+      weight: ${config.canaryTrafficWeight}`
+        : '# Canary engine disabled: 100% routed to primary vLLM inference engine'
+    }
+`;
+
+  files.push({
+    name: '10-multi-engine-canary-route.yaml',
+    path: `${config.namespace}/10-multi-engine-canary-route.yaml`,
+    category: 'routing',
+    content: canaryManifest,
+    description: 'Enterprise Experimentation Guarantee: Gateway API traffic splitting allowing live comparison of vLLM vs. TensorRT-LLM vs. ONNX without client changes.'
+  });
+
+  // 11. Enterprise Reliability Guarantee: Prometheus ServiceMonitor & SLA Alert Rules
+  const observabilityManifest = `# Enterprise Reliability Guarantee:
+# Decoupled architecture with Prometheus ServiceMonitor and SLA breach alerting rules.
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: ${config.deploymentName}-monitor
+  namespace: ${config.namespace}
+  labels:
+    release: prometheus
+    app.kubernetes.io/name: vllm-engine
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: vllm-engine
+  endpoints:
+  - port: http-inference
+    path: /metrics
+    interval: 15s
+---
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: vllm-sla-alerts
+  namespace: ${config.namespace}
+  labels:
+    role: alert-rules
+    app.kubernetes.io/part-of: enterprise-reliability
+spec:
+  groups:
+  - name: vllm.sla.rules
+    rules:
+    - alert: LLMQueueBacklogHigh
+      expr: sum(vllm:num_requests_waiting{namespace="${config.namespace}"}) > ${config.alertQueueBacklogThreshold || 10}
+      for: 2m
+      labels:
+        severity: critical
+      annotations:
+        summary: "Inference queue backlog exceeded SLA threshold (${config.alertQueueBacklogThreshold || 10} requests)"
+        description: "Monday morning spike or traffic surge detected. Requests are waiting in vLLM scheduler queue. Check autoscaling."
+    - alert: LLMGpuCacheNearExhaustion
+      expr: avg(vllm:gpu_cache_usage_factor{namespace="${config.namespace}"}) > 0.95
+      for: 1m
+      labels:
+        severity: warning
+      annotations:
+        summary: "GPU KV Cache allocation > 95%"
+        description: "PagedAttention KV blocks are near exhaustion. Recommend enabling FP8 KV cache or increasing max replica count."
+`;
+
+  files.push({
+    name: '11-observability-alerts-sla.yaml',
+    path: `${config.namespace}/11-observability-alerts-sla.yaml`,
+    category: 'infrastructure',
+    content: observabilityManifest,
+    description: 'Enterprise Reliability Guarantee: Prometheus ServiceMonitor and production alerting rules for SLA and queue depth compliance.'
+  });
+
+  // 12. Kustomization package
   const kustomizeManifest = `apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 
@@ -748,9 +873,13 @@ resources:
   - 06-${config.autoscalerType === 'keda' ? 'keda-autoscaler' : 'kubernetes-hpa'}.yaml
   - 07-gpu-node-provisioner.yaml
   - 08-gateway-api-and-wasm-security.yaml
+  - 09-pod-disruption-budget.yaml
+  - 10-multi-engine-canary-route.yaml
+  - 11-observability-alerts-sla.yaml
 
 commonLabels:
   app.kubernetes.io/part-of: vllm-production-stack
+  app.kubernetes.io/tier: enterprise-grade
   environment: production
 `;
 

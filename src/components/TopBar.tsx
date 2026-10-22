@@ -18,6 +18,7 @@ export const TopBar: React.FC<TopBarProps> = ({
     { id: 'architecture', label: 'Architecture & KV Routing' },
     { id: 'model_hardware', label: 'Model & Hardware' },
     { id: 'autoscaling', label: 'Autoscaling & KEDA' },
+    { id: 'enterprise', label: 'Enterprise Guarantees' },
     { id: 'cicd', label: 'CI/CD & GitOps' },
     { id: 'wasm_security', label: 'WASM & Client Security' },
     { id: 'manifests', label: 'Manifest Generator' },

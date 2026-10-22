@@ -57,12 +57,40 @@ export function validateConfiguration(
     });
   }
 
-  // 6. Good Configuration Accolades (Info)
+  // 6. Enterprise PDB vs Min Replicas check
+  if (config.enablePdb && config.minReplicas > 0 && config.pdbMinAvailable >= config.maxReplicas) {
+    issues.push({
+      severity: 'warning',
+      title: 'PodDisruptionBudget minAvailable equals Max Replicas',
+      message: `PDB minAvailable is set to ${config.pdbMinAvailable}, which matches maxReplicas (${config.maxReplicas}). This may prevent rolling node maintenance or cluster draining.`,
+      remedy: 'Set PDB minAvailable to 1 or lower than maxReplicas.'
+    });
+  }
+
+  // 7. Enterprise Canary Traffic Validation
+  if (config.canaryEngine !== 'none' && config.canaryTrafficWeight > 50) {
+    issues.push({
+      severity: 'warning',
+      title: 'Canary Traffic Exceeds 50%',
+      message: `Canary engine (${config.canaryEngine}) is configured with ${config.canaryTrafficWeight}% of total production traffic.`,
+      remedy: 'Canary traffic is recommended to remain <= 20% during initial A/B experimentation.'
+    });
+  }
+
+  // 8. Good Configuration Accolades (Info)
   if (!vram.isOom && config.enablePrefixCaching && config.routingStrategy === 'smart_prefix') {
     issues.push({
       severity: 'info',
       title: 'Production KV Cache Affinity Active',
       message: 'Smart router and vLLM prefix caching are synchronized. Identical system prompts and user conversation prefixes will achieve zero-redundancy matrix multiplication.'
+    });
+  }
+
+  if (config.enablePdb && config.enableServiceMonitor) {
+    issues.push({
+      severity: 'info',
+      title: 'Enterprise High-Availability & SLA Active',
+      message: `PodDisruptionBudget (minAvailable: ${config.pdbMinAvailable}) and Prometheus SLA Alert Rules are configured for zero-downtime operations.`
     });
   }
 
