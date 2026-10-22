@@ -200,7 +200,7 @@ export default function App() {
   };
 
   return (
-    <div className="min-h-screen bg-neutral-950 text-neutral-100 flex flex-col font-sans selection:bg-sky-500/30">
+    <div className="min-h-screen bg-neutral-950 text-neutral-100 flex flex-col font-sans selection:bg-sky-500/30 w-full max-w-full overflow-x-hidden">
       {/* 3-Zone Top Bar */}
       <TopBar
         activeTab={activeTab}
@@ -210,7 +210,7 @@ export default function App() {
       />
 
       {/* Production Blueprint Strip */}
-      <div className="border-b border-neutral-800 bg-neutral-900/40 px-6 py-2.5 flex items-center justify-between text-xs overflow-x-auto gap-4">
+      <div className="border-b border-neutral-800 bg-neutral-900/40 px-4 sm:px-6 py-2.5 flex items-center justify-between text-xs overflow-x-auto scrollbar-none gap-4 w-full">
         <div className="flex items-center gap-2 text-neutral-400 shrink-0">
           <Sparkles className="w-3.5 h-3.5 text-sky-400" />
           <span className="font-medium text-neutral-300">Architecture Blueprints:</span>
@@ -261,7 +261,7 @@ export default function App() {
       </div>
 
       {/* Main Workspace Body */}
-      <main className="flex-1 max-w-7xl w-full mx-auto p-6">
+      <main className="flex-1 max-w-7xl w-full mx-auto p-4 sm:p-6 min-w-0">
         {activeTab === 'architecture' && (
           <ArchitectureVisualizer
             config={config}
