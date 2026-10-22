@@ -16,6 +16,8 @@ Deploying large language models (LLMs) into production Kubernetes environments r
 
 **KubeVLLM Architect** is an open-source visual architect and Kubernetes manifest generator that designs, tunes, and validates production-grade LLM inference clusters. It eliminates guesswork and generates 11 fully functional, validated manifests deployable via Kustomize (`kubectl apply -k .`), Helm, or GitOps pipelines (ArgoCD, Flux).
 
+📘 **[Read the Step-by-Step Platform User Guide (USER_GUIDE.md)](./USER_GUIDE.md)** for a complete walkthrough of all features.
+
 ```
                       [Client Applications / OpenAI SDK]
                                       │
