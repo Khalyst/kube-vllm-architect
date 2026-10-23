@@ -77,7 +77,7 @@ KubeVLLM Architect provides guaranteed infrastructure contracts across four esse
   - **TPOT (Time Per Output Token)**: Generation pacing / inter-token latency during autoregressive decoding (ms/tok and tok/s/stream).
   - **Throughput**: Aggregate tokens the system processes per second across all replicas and streams.
   - **End-to-End Latency**: Total request turnaround duration from submission to final token (`E2E = Queue Delay + TTFT + [Output Tokens × TPOT]`).
-- **Cloud Cost Estimation & Infrastructure TCO**: Real-time monthly spend calculator comparing AWS EC2, GCP, and Azure pricing across On-Demand, Spot (up to 70% savings), and 1-Year Reserved/CUD tiers with interactive duty cycle and unit cost per 1M tokens.
+- **Cloud Cost Estimator Component**: Real-world hourly, daily, and monthly spend modeling across AWS, GCP, and Azure for any selected GPU (H100, H200, A100, L40S, L4, T4, MI300X) and replica counts, featuring On-Demand, Spot (up to 70% savings), and 1-Year Reserved rates, scaling curves, and single-click budget summary export.
 - **Modern Kubernetes Gateway API (`gateway.networking.k8s.io/v1`)**: Future-proof architecture replacing legacy Ingress NGINX (EOL March 2026) with standard `Gateway` and `HTTPRoute` resources using declarative `ResponseHeaderModifier` filters for browser WASM / WebGPU Cross-Origin Isolation (`COOP` & `COEP`).
 - **WASM Client Security & Envoy Guardrails**: Test client-side in-browser WASM PII redaction and generate Envoy WASM L7 prompt injection filters.
 - **Production CI/CD Pipelines**: Pre-configured GitHub Actions workflows featuring Trivy container CVE vulnerability scanning, multi-registry publishing (GHCR, AWS ECR, GCP WIF, ACR), and automated Kustomize rollouts.

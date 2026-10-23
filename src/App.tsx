@@ -14,6 +14,7 @@ import { ValidationView } from './components/ValidationView';
 import { WasmSecurityView } from './components/WasmSecurityView';
 import { CiCdView } from './components/CiCdView';
 import { EnterpriseGuaranteesView } from './components/EnterpriseGuaranteesView';
+import { CostEstimator } from './components/CostEstimator';
 import { Sparkles, Terminal, Cpu, Zap, Download } from 'lucide-react';
 import JSZip from 'jszip';
 
@@ -276,6 +277,17 @@ export default function App() {
             preset={activePreset}
             vram={vram}
             updateConfig={updateConfig}
+          />
+        )}
+
+        {activeTab === 'cost_estimator' && (
+          <CostEstimator
+            selectedGpuId={config.selectedGpuId}
+            gpuCountPerReplica={config.tensorParallelSize}
+            replicaCount={Math.max(1, config.minReplicas || 2)}
+            onGpuChange={(gpuId) => updateConfig({ selectedGpuId: gpuId })}
+            onReplicaChange={(reps) => updateConfig({ minReplicas: Math.min(reps, config.minReplicas), maxReplicas: Math.max(reps, config.maxReplicas) })}
+            onGpuCountChange={(count) => updateConfig({ tensorParallelSize: count })}
           />
         )}
 

@@ -17,6 +17,7 @@ export const TopBar: React.FC<TopBarProps> = ({
   const navItems = [
     { id: 'architecture', label: 'Architecture & KV Routing' },
     { id: 'model_hardware', label: 'Model & Hardware' },
+    { id: 'cost_estimator', label: 'Cost Estimator' },
     { id: 'autoscaling', label: 'Autoscaling & KEDA' },
     { id: 'enterprise', label: 'Enterprise Guarantees' },
     { id: 'cicd', label: 'CI/CD & GitOps' },

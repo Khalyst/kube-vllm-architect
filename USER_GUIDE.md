@@ -97,17 +97,21 @@ In the **Performance & Scalability Estimation** panel, experiment with the live 
 
 ## 6. Step 4: Estimating Cloud Spend & Cost Arbitrage
 
-In the **Cloud Cost Estimation & Infrastructure TCO** panel:
+Navigate to the dedicated **Cost Estimator** tab (or the panel inside **Model & Hardware**):
 
-1. **Select Cloud Provider**: Toggle between **AWS**, **GCP**, or **Azure**.
-2. **Select Purchasing Model**:
-   - **On-Demand**: Standard baseline pricing.
-   - **Spot / Preemptible**: Up to 70% savings.
-   - **1-Year Reserved / CUD**: Committed usage discounts.
-3. **Adjust Daily Duty Cycle**: Simulate working-hour patterns (e.g. 10 hours/day vs. 24/7).
-4. **Review Metrics**:
-   - Monthly spend at minimum vs. maximum replicas.
-   - Monthly dollar savings realized by KEDA autoscaling.
+1. **Configure Hardware & Scaling**:
+   - Choose your GPU accelerator (NVIDIA H100, H200, A100, L40S, L4, A10G, T4, or AMD MI300X).
+   - Set the replica pod count (1 to 16 pods) using the slider or quick-select buttons.
+   - Adjust GPUs per pod (Tensor Parallelism TP=1, 2, 4, 8).
+2. **Select Time Horizon**:
+   - Toggle between **Hourly Rate ($/hr)**, **Daily Rate ($/day)**, and **Monthly Rate ($/mo)**.
+3. **Compare Across Clouds (AWS vs. GCP vs. Azure)**:
+   - Review On-Demand hourly spend, Spot / Preemptible rate (with savings percentage), and 1-Year Reserved / CUD pricing.
+   - Look for the **"Lowest Cost Provider"** badge highlighting the best value cloud.
+4. **Inspect the Hourly Spend Scaling Curve**:
+   - Review the Recharts trajectory curve showing how spend grows across AWS, GCP, and Azure as pods scale from 1 to 16.
+5. **Copy Budget Summary**:
+   - Click **"Copy Budget Summary"** to export an instant text breakdown for management or FinOps approvals.
    - **Unit Cost per 1M Tokens**: Compare against proprietary API pricing.
 
 ---
